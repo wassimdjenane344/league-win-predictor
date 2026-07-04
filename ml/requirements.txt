@@ -2,5 +2,9 @@ pandas==2.2.3
 scikit-learn==1.5.2
 mlflow==2.17.2
 dvc==3.55.2
+# Pinned: newer pathspec releases drop the private `_DIR_MARK` symbol that
+# dvc 3.55 imports, which crashes `dvc pull` with an ImportError. 0.12.1 is
+# the last version that keeps dvc working (hit both locally and in CI).
+pathspec==0.12.1
 pyyaml==6.0.2
 dagshub==0.3.44

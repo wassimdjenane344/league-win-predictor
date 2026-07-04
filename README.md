@@ -408,19 +408,29 @@ son environnement à son propre démarrage.
 ## 13. Déploiement cloud
 
 Le sujet laisse le choix de la plateforme (Render, Railway, Scalingo, Koyeb...).
-Toutes proposent un tier gratuit et un déploiement à partir d'un Dockerfile.
-Étapes génériques (exemple avec Render) :
+Le repo fournit un **blueprint `render.yaml`** qui décrit les 2 services
+(backend + frontend) prêts à déployer sur [Render](https://render.com).
 
-1. Créer 2 *Web Services* Docker par environnement (staging + prod) : un
-   pointant sur `backend/Dockerfile`, un sur `frontend/Dockerfile`.
-2. Renseigner les variables d'environnement du service (celles de la section
-   12) dans le dashboard de la plateforme.
-3. Récupérer l'URL de *deploy hook* de chaque service et la mettre dans les
-   variables GitHub `STAGING_DEPLOY_HOOK_URL` / `PRODUCTION_DEPLOY_HOOK_URL`
-   (section 10) — c'est ce que les workflows appellent pour déclencher un
-   redéploiement après un train/promote réussi.
-4. Une fois les deux services démarrés, mettre à jour `NEXT_PUBLIC_API_URL`
-   du frontend avec l'URL publique du backend.
+Étapes (Render) :
+
+1. Créer un compte sur render.com (connexion via GitHub, autoriser le repo).
+2. **New + → Blueprint** → choisir ce repo → Render lit `render.yaml` et crée
+   `lol-backend` et `lol-frontend`.
+3. Dans les réglages du **backend**, renseigner les 3 secrets marqués
+   `sync: false` (mêmes valeurs que les GitHub Secrets de l'environment
+   `production` : `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
+   `MLFLOW_TRACKING_PASSWORD`). Déployer → récupérer l'URL publique du backend.
+4. Renseigner `CORS_ORIGINS` (backend) = URL du frontend, et
+   `NEXT_PUBLIC_API_URL` (frontend) = URL du backend, puis redéployer le
+   frontend (cette variable est compilée dans le build Next.js).
+5. Récupérer l'URL de *deploy hook* de chaque service (Settings → Deploy Hook)
+   et la mettre dans les variables GitHub `PRODUCTION_DEPLOY_HOOK_URL` (et
+   `STAGING_DEPLOY_HOOK_URL` si tu déploies aussi un environnement staging) —
+   c'est ce que les workflows appellent pour redéployer après un train/promote
+   réussi (section 10).
+
+Les Dockerfiles écoutent sur le port `$PORT` fourni par la plateforme et se
+lient à `0.0.0.0`, donc ils fonctionnent tels quels sur Render/Railway/etc.
 
 ---
 

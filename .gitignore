@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# MLflow local tracking (not committed: this is exactly what DVC/MLflow
+# registry + a real tracking server replace -- see README "Reproducibility")
+ml/mlruns/
+mlartifacts/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Env files (never commit real secrets, only .env.example templates)
+.env
+.env.*.local
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Note: ml/data/raw/*.csv is intentionally NOT re-ignored here; DVC already
+# wrote ml/data/raw/.gitignore for the tracked dataset file itself.
+# .dvc-remote/ is intentionally NOT ignored: it's the local DVC remote we
+# commit so `dvc pull` works in CI without cloud credentials (see README).

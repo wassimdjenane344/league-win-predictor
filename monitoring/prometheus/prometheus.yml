@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: "flask_backend"
+    scrape_interval: 5s
+    metrics_path: "/metrics"
+    static_configs:
+      # docker-compose service name when running the stack locally (see
+      # docker-compose.yml at the repo root). To point this at a deployed
+      # production backend instead, replace with its public host:port, e.g.
+      # ['lol-win-predictor-backend.onrender.com:443'] (and set scheme: https).
+      - targets: ["backend:5000"]

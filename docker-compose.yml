@@ -1,0 +1,63 @@
+version: "3.8"
+
+# Local, single-command reproduction of the whole system: app (backend +
+# frontend) plus the monitoring stack (Prometheus + Grafana), wired exactly
+# like the "Monitoring: Prometheus and Grafana" section of the final
+# project spec. Run: `docker-compose up --build`.
+
+networks:
+  app:
+    driver: bridge
+
+services:
+  backend:
+    build: ./backend
+    container_name: lol-backend
+    ports:
+      - "5000:5000"
+    environment:
+      ENVIRONMENT: development
+      MLFLOW_TRACKING_URI: file:///mlruns
+      MLFLOW_MODEL_NAME: lol-win-predictor
+      MLFLOW_MODEL_STAGE: Production
+      CORS_ORIGINS: http://localhost:3000
+      PORT: "5000"
+    volumes:
+      - ./ml/mlruns:/mlruns
+    networks: [app]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000
+    container_name: lol-frontend
+    ports:
+      - "3000:3000"
+    depends_on: [backend]
+    networks: [app]
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lol-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on: [backend]
+    networks: [app]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lol-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+    depends_on: [prometheus]
+    networks: [app]

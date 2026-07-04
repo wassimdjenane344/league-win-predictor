@@ -1,0 +1,133 @@
+:root {
+  --bg: #0a1428;
+  --panel: #0f2140;
+  --gold: #c8aa6e;
+  --blue: #3b82f6;
+  --red: #ef4444;
+  --text: #f0e6d2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #10233f 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+h1 {
+  color: var(--gold);
+  font-size: 1.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #8ea3c4;
+  margin-bottom: 2rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid #1e3a5f;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+label {
+  display: block;
+  font-size: 0.8rem;
+  color: #8ea3c4;
+  margin-bottom: 0.3rem;
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: #081a30;
+  border: 1px solid #23496f;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+button {
+  margin-top: 1.5rem;
+  width: 100%;
+  padding: 0.8rem;
+  background: var(--gold);
+  color: #10233f;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.bar {
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid #1e3a5f;
+}
+
+.bar-blue {
+  background: var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  transition: width 0.4s ease;
+}
+
+.bar-red {
+  background: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  transition: width 0.4s ease;
+}
+
+.result-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.error {
+  color: var(--red);
+  margin-top: 1rem;
+}
+
+.meta {
+  font-size: 0.75rem;
+  color: #5f7699;
+  margin-top: 1rem;
+  line-height: 1.5;
+}

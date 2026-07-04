@@ -1,0 +1,73 @@
+name: dev -> staging
+
+# "dev -> staging" required pipeline (final project spec):
+#   - full test suite (unit + integration + e2e)
+#   - deploy code to staging environment
+#   - deploy candidate model from registry (MLflow): train.py registers a
+#     new version and moves it to the "Staging" stage; the staging backend
+#     (MLFLOW_MODEL_STAGE=Staging) picks it up as soon as it (re)starts.
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  full-test-suite-and-train-candidate:
+    runs-on: ubuntu-latest
+    environment: staging # GitHub Environment -> scopes the secrets below
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+      MLFLOW_MODEL_NAME: lol-win-predictor
+      MLFLOW_MODEL_STAGE: Staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Pull DVC-tracked dataset
+        run: dvc pull
+
+      - name: Unit tests
+        run: pytest tests/unit -v
+
+      - name: Integration tests
+        run: pytest tests/integration -v
+
+      - name: Train candidate model and register it (-> Staging)
+        working-directory: ml/src
+        run: python train.py --model-type logreg --register
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend
+
+      - name: Start backend (serving the Staging candidate)
+        run: |
+          nohup python -m flask --app wsgi:app run --host 0.0.0.0 --port 5000 \
+            > backend.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5000/health && break; sleep 1; done
+        working-directory: backend
+
+      - name: Start frontend
+        run: |
+          NEXT_PUBLIC_API_URL=http://localhost:5000 nohup npm run dev > frontend.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000 && break; sleep 1; done
+        working-directory: frontend
+
+      - name: End-to-end tests (Selenium)
+        run: pytest tests/e2e -v
+
+      - name: Deploy backend + frontend to the staging environment
+        if: ${{ vars.STAGING_DEPLOY_HOOK_URL != '' }}
+        run: |
+          curl -fsSL -X POST "${{ vars.STAGING_DEPLOY_HOOK_URL }}"

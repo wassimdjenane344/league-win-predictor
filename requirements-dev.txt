@@ -1,0 +1,6 @@
+-r backend/requirements.txt
+-r ml/requirements.txt
+ruff==0.7.4
+pytest==8.3.3
+pytest-cov==6.0.0
+selenium==4.25.0

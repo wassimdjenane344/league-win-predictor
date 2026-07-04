@@ -2,3 +2,5 @@
     remote = storage
 ['remote "storage"']
     url = ../.dvc-remote
+['remote "dagshub"']
+    url = https://dagshub.com/wassimdjenane344/league-win-predictor.dvc

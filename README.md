@@ -153,18 +153,16 @@ déploiements.
 la traçabilité : *"Every training run must be traceable to: a DVC data
 version, a Git commit hash."*
 
-**MLflow local vs DagsHub** : par défaut `MLFLOW_TRACKING_URI` pointe vers
-`ml/mlruns` (fichier local, zéro setup, ce que j'ai utilisé pour valider tout
-le pipeline). Pour un tracking partagé en équipe (recommandé par le cours,
-`15-MLFlow.pdf`), crée un compte sur [dagshub.com](https://dagshub.com),
-connecte ton repo GitHub, puis dans les secrets GitHub de chaque environment
-(staging/production) mets :
-```
-MLFLOW_TRACKING_URI=https://dagshub.com/<user>/<repo>.mlflow
-MLFLOW_TRACKING_USERNAME=<user>
-MLFLOW_TRACKING_PASSWORD=<token dagshub>
-```
-Le code ne change pas : `mlflow.set_tracking_uri()` lit ces variables d'env.
+**MLflow + DagsHub (connecté)** : le tracking et le registre sont hébergés sur
+DagsHub — registre partagé, visible par toute l'équipe :
+<https://dagshub.com/wassimdjenane344/league-win-predictor.mlflow>. Les
+identifiants (`MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
+`MLFLOW_TRACKING_PASSWORD`) sont stockés dans les GitHub Secrets des
+environments `staging` et `production`, jamais en dur. En local, si aucun
+`MLFLOW_TRACKING_URI` n'est défini, le code retombe sur `ml/mlruns` (file
+store local) — le code ne change pas, `mlflow.set_tracking_uri()` lit
+simplement la variable d'env. DagsHub sert aussi de **remote DVC** (le dataset
+y est stocké en plus du remote local) — c'est le "store data remotely" du sujet.
 
 ---
 
@@ -464,16 +462,19 @@ Tout ce qui précède est construit, testé et validé **en local**. Il reste de
 étapes qui demandent tes propres comptes (je ne peux pas les créer à ta
 place) :
 
-1. **Créer le repo GitHub** et pousser les branches `main`, `dev`, `staging`
-   (déjà créées localement) + une première `feature/*` pour la suite du
-   développement en équipe.
-2. **Configurer les GitHub Environments** `staging` et `production`
-   (Settings → Environments) avec les secrets/variables listés en section 10.
-3. *(Recommandé)* **Créer un compte DagsHub**, lier le repo, remplacer
-   `MLFLOW_TRACKING_URI` par l'URL DagsHub dans les secrets — pour que toute
-   l'équipe voie les mêmes expériences (section 3).
-4. **Créer les comptes/services d'hébergement** (Render/Railway/...) pour le
-   backend et le frontend, staging + prod, et remplir les deploy hooks
-   (section 13).
-5. Travailler désormais **exclusivement via des branches `feature/*`** vers
+Déjà fait : repo GitHub + 4 branches, les 3 pipelines CI/CD verts, DagsHub
+connecté (registre MLflow + remote DVC), et les GitHub Secrets MLflow posés
+sur les environments `staging` et `production`.
+
+Il reste uniquement ce qui dépend d'un hébergeur cloud :
+
+1. **Créer les services d'hébergement** (Render/Railway/...) pour le backend
+   et le frontend → obtenir l'**URL publique** de production (livrable noté).
+2. **Renseigner les deploy hooks** comme variables GitHub
+   `STAGING_DEPLOY_HOOK_URL` / `PRODUCTION_DEPLOY_HOOK_URL` (section 10) — les
+   étapes "Deploy" des workflows sont *skipped* tant qu'elles sont vides.
+3. **Pointer le monitoring sur la prod live** : changer la cible dans
+   `monitoring/prometheus/prometheus.yml` pour l'URL publique du backend, et
+   héberger Prometheus/Grafana (section 11).
+4. Travailler désormais **exclusivement via des branches `feature/*`** vers
    `dev`, laisser les pipelines CI/CD faire le reste.

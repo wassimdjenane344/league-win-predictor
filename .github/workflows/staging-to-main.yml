@@ -24,6 +24,9 @@ jobs:
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
       MLFLOW_MODEL_NAME: lol-win-predictor
+      # `secrets` can't be used directly in a step-level `if`, so we derive a
+      # boolean env from it here (env may reference secrets) and test that below.
+      HAS_SHARED_REGISTRY: ${{ secrets.MLFLOW_TRACKING_URI != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +45,7 @@ jobs:
       # candidate in "Staging" for the gate to evaluate. With a real shared
       # registry configured, dev->staging already put one there.
       - name: Ensure a Staging candidate exists
-        if: ${{ secrets.MLFLOW_TRACKING_URI == '' }}
+        if: env.HAS_SHARED_REGISTRY == 'false'
         working-directory: ml/src
         run: python train.py --model-type logreg --register
 

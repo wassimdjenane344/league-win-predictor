@@ -16,7 +16,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(predict_requests_total[1m]))",
+          "expr": "sum(rate(predict_requests_total[5m]))",
           "legendFormat": "requests/s",
           "refId": "A"
         }
@@ -45,7 +45,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(predict_requests_failed_total[1m]))",
+          "expr": "sum(rate(predict_requests_failed_total[5m]))",
           "legendFormat": "failed requests/s",
           "refId": "A"
         }

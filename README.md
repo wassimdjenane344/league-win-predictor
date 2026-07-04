@@ -378,12 +378,20 @@ job qui déclare `environment: staging` ou `environment: production`.
 - `docker-compose.yml` lance tout ensemble : `backend`, `frontend`,
   `prometheus` (port 9090), `grafana` (port 3001, login `admin`/`admin`).
 
-**Pour surveiller la vraie prod** (le sujet insiste : *"Monitoring should run
-against the live production deployment"*) : changer la cible dans
-`monitoring/prometheus/prometheus.yml` pour l'URL publique du backend déployé
-(voir le commentaire dans le fichier), et héberger ce Prometheus/Grafana sur
-la même plateforme cloud que le reste (Render/Railway proposent aussi des
-services Docker gratuits pour ça).
+**Surveiller la vraie prod** (le sujet insiste : *"Monitoring should run
+against the live production deployment"*) : un stack dédié est fourni.
+`monitoring/prometheus/prometheus.prod.yml` scrape le backend **public** déployé
+sur Render (`lol-backend-awex.onrender.com`), et `docker-compose.monitoring.yml`
+lance Prometheus + Grafana pointés dessus :
+
+```bash
+docker compose -f docker-compose.monitoring.yml up
+# Prometheus : http://localhost:9090  (cible = backend de production live)
+# Grafana    : http://localhost:3001  (admin/admin, dashboard auto-chargé)
+```
+
+Vérifié : Prometheus voit la cible de prod `up` et remonte les vraies métriques
+(`predict_requests_total`, latence, erreurs, `app_up`) depuis le serveur live.
 
 ---
 

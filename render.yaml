@@ -1,0 +1,49 @@
+# Render Blueprint: production deployment of the backend + frontend.
+# Create the two services in one go via Render -> New + -> Blueprint -> pick
+# this repo. Secrets (sync: false) are set once in the Render dashboard, never
+# committed here. See README section 13.
+services:
+  - type: web
+    name: lol-backend
+    runtime: docker
+    repo: https://github.com/wassimdjenane344/league-win-predictor
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: MLFLOW_MODEL_NAME
+        value: lol-win-predictor
+      # Production must only ever serve the "Production" registry stage.
+      - key: MLFLOW_MODEL_STAGE
+        value: Production
+      - key: APP_VERSION
+        value: "1.0.0"
+      # --- set these in the Render dashboard (same values as the GitHub
+      #     production environment secrets) ---
+      - key: MLFLOW_TRACKING_URI
+        sync: false
+      - key: MLFLOW_TRACKING_USERNAME
+        sync: false
+      - key: MLFLOW_TRACKING_PASSWORD
+        sync: false
+      # Set to the frontend's public URL once it's known (CORS allow-list).
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: lol-frontend
+    runtime: docker
+    repo: https://github.com/wassimdjenane344/league-win-predictor
+    branch: main
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      # Baked into the Next.js build; set to the backend's public URL, then
+      # trigger a redeploy of the frontend so the new value is compiled in.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

@@ -36,10 +36,14 @@ def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app, origins=Config.CORS_ORIGINS.split(",") if Config.CORS_ORIGINS != "*" else "*")
 
+    # Load the model eagerly, but NEVER let a transient registry/network issue
+    # (e.g. DagsHub slow or unreachable during a deploy) crash startup: the
+    # platform health check hits /health, which must come up regardless. If the
+    # eager load fails, the model is loaded lazily on the first /predict.
     try:
         load_model()
-    except RuntimeError as exc:
-        logging.warning("%s /predict will fail until one is registered/promoted.", exc)
+    except Exception as exc:  # noqa: BLE001 - startup must survive any load failure
+        logging.warning("Model not loaded at startup (%s); will retry on first /predict.", exc)
 
     @app.get("/health")
     def health():

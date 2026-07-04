@@ -1,42 +1,44 @@
-# League Win Predictor — Projet Final MLOps
+# League Win Predictor — MLOps Final Project
 
-Prédit la probabilité de victoire de l'équipe bleue dans une partie classée de
-**League of Legends**, à partir des statistiques de la 10ᵉ minute (or, kills,
-dragons, hérauts...). C'est le prétexte "métier" du projet — l'objectif réel,
-demandé par le sujet (`final project 2026.pdf`), est de construire le cycle de
-vie MLOps complet autour de ce modèle : versioning des données, tracking
-d'expériences, registre de modèles, CI/CD à portes de qualité, promotion
-automatique, monitoring, et déploiement cloud.
+Predicts the **blue team's win probability** in a ranked **League of Legends**
+game from the first-10-minutes stats (gold, kills, dragons, heralds…). The game
+is just the "business" pretext — the real goal, set by the assignment
+(`final project 2026.pdf`), is to build the **full MLOps lifecycle** around that
+model: data versioning, experiment tracking, a model registry, CI/CD with
+quality gates, automatic promotion, monitoring, and cloud deployment.
 
-Ce document explique **chaque grande partie** : ce qui a été fait, à quoi ça
-correspond dans le sujet, et pourquoi c'est construit comme ça.
+**Live app:** https://lol-frontend-scaw.onrender.com
+**Model registry (DagsHub):** https://dagshub.com/wassimdjenane344/league-win-predictor.mlflow
 
-## Sommaire
+This document explains **every major part**: what was done, which assignment
+requirement it maps to, and why it is built this way.
 
-1. [Vue d'ensemble et architecture](#1-vue-densemble-et-architecture)
-2. [Le dataset et DVC](#2-le-dataset-et-dvc)
-3. [Entraînement et MLflow](#3-entraînement-et-mlflow)
-4. [Le pipeline de promotion de modèle](#4-le-pipeline-de-promotion-de-modèle)
-5. [Le backend Flask](#5-le-backend-flask)
-6. [Le frontend Next.js](#6-le-frontend-nextjs)
-7. [Les tests](#7-les-tests)
-8. [Lint + Git hooks](#8-lint--git-hooks)
-9. [Modèle de branches Git](#9-modèle-de-branches-git)
-10. [CI/CD — les 3 pipelines GitHub Actions](#10-cicd--les-3-pipelines-github-actions)
-11. [Monitoring Prometheus + Grafana](#11-monitoring-prometheus--grafana)
+## Table of contents
+
+1. [Overview & architecture](#1-overview--architecture)
+2. [Dataset & DVC](#2-dataset--dvc)
+3. [Training & MLflow](#3-training--mlflow)
+4. [The model promotion pipeline](#4-the-model-promotion-pipeline)
+5. [The Flask backend](#5-the-flask-backend)
+6. [The Next.js frontend](#6-the-nextjs-frontend)
+7. [Tests](#7-tests)
+8. [Lint & Git hooks](#8-lint--git-hooks)
+9. [Git branching model](#9-git-branching-model)
+10. [CI/CD — the 3 GitHub Actions pipelines](#10-cicd--the-3-github-actions-pipelines)
+11. [Prometheus + Grafana monitoring](#11-prometheus--grafana-monitoring)
 12. [12-factor / configuration](#12-12-factor--configuration)
-13. [Déploiement cloud](#13-déploiement-cloud)
-14. [Reproduire le projet de zéro](#14-reproduire-le-projet-de-zéro)
-15. [Ce qu'il te reste à faire](#15-ce-quil-te-reste-à-faire)
+13. [Cloud deployment](#13-cloud-deployment)
+14. [Reproduce the project from scratch](#14-reproduce-the-project-from-scratch)
+15. [Project status](#15-project-status)
 
 ---
 
-## 1. Vue d'ensemble et architecture
+## 1. Overview & architecture
 
 ```mermaid
 flowchart LR
     subgraph Client
-        Browser["Navigateur\n(formulaire de stats)"]
+        Browser["Browser\n(stats form)"]
     end
 
     subgraph Frontend["Frontend - Next.js"]
@@ -48,15 +50,15 @@ flowchart LR
         Loader["model_loader.py"]
     end
 
-    subgraph MLflow["MLflow Tracking + Registry"]
+    subgraph MLflow["MLflow Tracking + Registry (DagsHub)"]
         Reg["lol-win-predictor\nStaging / Production"]
     end
 
-    subgraph Data["Données"]
+    subgraph Data["Data"]
         DVC["DVC\nhigh_diamond_ranked_10min.csv"]
     end
 
-    subgraph Obs["Observabilité"]
+    subgraph Obs["Observability"]
         Prom["Prometheus"]
         Graf["Grafana"]
     end
@@ -69,393 +71,380 @@ flowchart LR
     Graf --> Prom
 ```
 
-**Pourquoi ce découpage ?** Le sujet impose explicitement : un backend qui sert
-un modèle ML, un frontend NodeJS (React/Next), un registre de modèles comme
-**unique source de vérité pour le déploiement**, et un monitoring séparé de
-l'application elle-même. Chaque brique ci-dessus correspond à une exigence
-précise du sujet — le détail est expliqué section par section.
+**Why this split?** The assignment explicitly requires: a backend serving an ML
+model, a NodeJS frontend (React/Next), a model registry as the **single source
+of truth for deployment**, and monitoring that is separate from the app itself.
+Each box above maps to a specific requirement — detailed section by section.
 
-Arborescence :
+Project layout:
 
 ```
 league-win-predictor/
-├── backend/        # API Flask qui sert le modèle
-├── frontend/        # UI Next.js
-├── ml/               # données (DVC) + entraînement/promotion (MLflow)
+├── backend/          # Flask API that serves the model
+├── frontend/         # Next.js UI
+├── ml/               # data (DVC) + training/promotion (MLflow)
 ├── tests/            # unit / integration / e2e
-├── monitoring/        # Prometheus + Grafana (provisioning)
-├── .github/workflows/ # les 3 pipelines CI/CD
-├── .githooks/         # pre-push (lint + tests)
-└── docker-compose.yml # tout faire tourner en local en une commande
+├── monitoring/       # Prometheus + Grafana (provisioning)
+├── .github/workflows/# the 3 CI/CD pipelines
+├── .githooks/        # pre-push (lint + tests)
+├── render.yaml       # Render blueprint (backend + frontend)
+└── docker-compose.yml# run the whole stack locally in one command
 ```
 
 ---
 
-## 2. Le dataset et DVC
+## 2. Dataset & DVC
 
-**Ce qui a été fait** : téléchargement du vrai dataset Kaggle *"League of
-Legends Diamond Ranked Games (10 min)"* (9879 parties classées Diamond I à
-Master, 40 colonnes, aucune valeur manquante, cible équilibrée ~50/50), placé
-dans `ml/data/raw/high_diamond_ranked_10min.csv`, puis suivi avec DVC :
+**What was done:** downloaded the real Kaggle dataset *"League of Legends
+Diamond Ranked Games (10 min)"* (9,879 Diamond I–Master games, 40 columns, no
+missing values, balanced target ~50/50), placed at
+`ml/data/raw/high_diamond_ranked_10min.csv`, then tracked with DVC:
 
 ```bash
 dvc init
-dvc add ml/data/raw/high_diamond_ranked_10min.csv   # crée le .dvc (pointeur)
-dvc remote add -d storage .dvc-remote                # stockage "distant"
+dvc add ml/data/raw/high_diamond_ranked_10min.csv   # creates the .dvc pointer
+dvc remote add -d storage .dvc-remote                # "remote" storage
 dvc push
 ```
 
-**À quoi ça correspond** : section *"Data Versioning (DVC)"* du sujet — suivre
-les données brutes, les stocker à distance, et pouvoir tracer chaque run
-d'entraînement à une version de données précise (hash MD5 DVC) + un commit Git.
+**Maps to:** the *"Data Versioning (DVC)"* section — track the raw data, store
+it remotely, and make every training run traceable to a precise data version
+(DVC MD5 hash) + a Git commit.
 
-**Pourquoi un remote DVC local (`.dvc-remote/`) plutôt que S3/Google Drive ?**
-Le cours (`14-DVC.pdf`) montre les deux, mais S3/GDrive demandent un compte
-cloud et des identifiants que je n'ai pas à ta place. `.dvc-remote/` est un
-dossier **committé dans le repo** : ça reproduit exactement le même mécanisme
-DVC (pointeur `.dvc` dans Git, données réelles ailleurs, `dvc pull` les
-restaure), mais ça marche immédiatement après un `git clone`, y compris dans
-la CI, sans aucun secret à configurer. Vérifié : suppression du fichier +
-cache local, puis `dvc pull` → fichier restauré à l'identique (même hash MD5).
-
-**Pour passer à un vrai remote cloud** (recommandé une fois le projet en
-équipe) : une seule commande à changer, ex. pour S3 :
-```bash
-dvc remote add -d storage s3://ton-bucket/lol-data
-dvc push
-```
-et ajouter les credentials AWS en secrets GitHub pour que la CI puisse
-`dvc pull`.
+**Why a local DVC remote (`.dvc-remote/`) as well?** The course (`14-DVC.pdf`)
+shows both, but S3/GDrive need a cloud account and credentials. `.dvc-remote/`
+is a folder **committed in the repo**: it reproduces the exact DVC mechanism
+(`.dvc` pointer in Git, real data elsewhere, `dvc pull` restores it) but works
+immediately after `git clone`, including in CI, with no secret to configure.
+Verified: delete the file + local cache, `dvc pull` → file restored identically
+(same MD5 hash). The dataset is **also pushed to DagsHub** as a real cloud DVC
+remote, satisfying the "store data remotely" requirement.
 
 ---
 
-## 3. Entraînement et MLflow
+## 3. Training & MLflow
 
-**Ce qui a été fait** — `ml/src/train.py` :
-- charge `high_diamond_ranked_10min.csv`, split train/test stratifié,
-- entraîne une régression logistique (ou random forest, `--model-type`),
-- logge dans MLflow : paramètres, métriques (`accuracy`, `f1`, `precision`,
-  `recall`, `roc_auc`), et deux **tags de traçabilité** : `git_commit` (hash du
-  commit courant) et `dvc_data_version` (hash MD5 lu dans le `.dvc`),
-- avec `--register` : enregistre le modèle dans le **MLflow Model Registry**
-  sous le nom `lol-win-predictor` et le passe au stage **Staging**.
+**What was done** — `ml/src/train.py`:
+- loads `high_diamond_ranked_10min.csv`, stratified train/test split,
+- trains a logistic regression (or random forest, `--model-type`),
+- logs to MLflow: parameters, metrics (`accuracy`, `f1`, `precision`, `recall`,
+  `roc_auc`), and two **traceability tags**: `git_commit` (current commit hash)
+  and `dvc_data_version` (MD5 read from the `.dvc` pointer),
+- with `--register`: registers the model in the **MLflow Model Registry** as
+  `lol-win-predictor` and moves it to the **Staging** stage.
 
-Résultat réel obtenu en local (régression logistique, seed=42) :
-**accuracy = 0.7196**, roc_auc = 0.806 — cohérent avec les benchmarks publiés
-sur ce dataset (~72-73%).
+Real result (logistic regression, seed=42): **accuracy = 0.7196**,
+roc_auc = 0.806 — consistent with published benchmarks on this dataset (~72-73%).
 
-**À quoi ça correspond** : *"Model Versioning & Registry (MLflow + DagsHub)"*
-— chaque version de modèle doit logger métriques, paramètres, version de
-données et version de code, et le registre doit être la source de vérité des
-déploiements.
+**Maps to:** *"Model Versioning & Registry (MLflow + DagsHub)"* — every model
+version must log metrics, parameters, data version and code version, and the
+registry must be the single source of truth for deployments.
 
-**Pourquoi ces tags précisément ?** C'est la définition littérale du sujet de
-la traçabilité : *"Every training run must be traceable to: a DVC data
-version, a Git commit hash."*
+**Why exactly those tags?** They are the literal definition of traceability in
+the assignment: *"Every training run must be traceable to: a DVC data version,
+a Git commit hash."*
 
-**MLflow + DagsHub (connecté)** : le tracking et le registre sont hébergés sur
-DagsHub — registre partagé, visible par toute l'équipe :
-<https://dagshub.com/wassimdjenane344/league-win-predictor.mlflow>. Les
-identifiants (`MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
-`MLFLOW_TRACKING_PASSWORD`) sont stockés dans les GitHub Secrets des
-environments `staging` et `production`, jamais en dur. En local, si aucun
-`MLFLOW_TRACKING_URI` n'est défini, le code retombe sur `ml/mlruns` (file
-store local) — le code ne change pas, `mlflow.set_tracking_uri()` lit
-simplement la variable d'env. DagsHub sert aussi de **remote DVC** (le dataset
-y est stocké en plus du remote local) — c'est le "store data remotely" du sujet.
+**MLflow + DagsHub (connected):** tracking and the registry are hosted on
+DagsHub — a shared registry visible to the whole team:
+<https://dagshub.com/wassimdjenane344/league-win-predictor.mlflow>. The
+credentials (`MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
+`MLFLOW_TRACKING_PASSWORD`) live in the GitHub Secrets of the `staging` and
+`production` environments, never hard-coded. Locally, if `MLFLOW_TRACKING_URI`
+is unset, the code falls back to `ml/mlruns` (a local file store) — the code
+does not change, `mlflow.set_tracking_uri()` simply reads the env var.
 
 ---
 
-## 4. Le pipeline de promotion de modèle
+## 4. The model promotion pipeline
 
-**Ce qui a été fait** — `ml/src/promote.py`, la pièce centrale demandée par
-*"Model Promotion Pipeline (Core Requirement)"* :
+**What was done** — `ml/src/promote.py`, the centerpiece required by *"Model
+Promotion Pipeline (Core Requirement)"*:
 
-1. récupère la version actuellement en stage **Staging** du modèle,
-2. la réévalue sur un jeu de test tenu à l'écart (même split que
-   l'entraînement, donc comparable),
-3. applique la **porte de qualité** (`ml/src/evaluate.py`) : `accuracy >= 0.70`,
-4. **si ça passe** : promotion vers **Production** (l'ancienne version
-   Production est archivée) ;
-   **si ça échoue** : le script sort avec un code d'erreur (`sys.exit(1)`),
-   le modèle reste en Staging, Production n'est pas touché.
+1. fetch the model version currently in the **Staging** stage,
+2. re-evaluate it on a held-out test split (same split as training, so
+   comparable),
+3. apply the **quality gate** (`ml/src/evaluate.py`): `accuracy >= 0.70`,
+4. **if it passes**: promote to **Production** (the previous Production version
+   is archived);
+   **if it fails**: the script exits non-zero (`sys.exit(1)`), the model stays
+   in Staging, Production is untouched.
 
-Testé en conditions réelles : entraînement → `accuracy=0.7196` (≥ 0.70) →
-promotion effective vers Production, confirmée par les logs MLflow.
+Verified end to end: training → `accuracy=0.7196` (≥ 0.70) → actual promotion to
+Production, confirmed by the MLflow/DagsHub registry (v_n Production, previous
+version Archived).
 
-**Pourquoi une seule porte de qualité (accuracy) plutôt que plusieurs ?** Le
-sujet dit *"at least one required"* — j'ai choisi l'accuracy car c'est la
-métrique la plus directement liée à l'utilité du modèle pour ce cas d'usage
-(prédire un gagnant). Le code est structuré pour qu'ajouter une deuxième porte
-(latence, compatibilité de schéma) soit un simple ajout dans `evaluate.py`.
+**Why a single quality gate (accuracy)?** The assignment says *"at least one
+required"* — accuracy is the metric most directly tied to the model's usefulness
+here (predicting a winner). The code is structured so adding a second gate
+(latency, schema compatibility) is a one-line addition in `evaluate.py`.
 
-**Où ça se déclenche** : c'est l'étape centrale du pipeline `staging -> main`
-(section 10) — la fusion de `staging` vers `main` ne peut aboutir à un déploiement
-prod que si cette porte est franchie.
-
----
-
-## 5. Le backend Flask
-
-**Ce qui a été fait** — `backend/app/` :
-- `main.py` : factory `create_app()` (repris du pattern du TP
-  *"Linting, Testing & Git Hooks for a Flask App"*), avec 3 routes :
-  - `GET /health` → statut + métadonnées du modèle chargé (nom, version,
-    stage, commit, version de données),
-  - `POST /predict` → construit le vecteur de features (`features.py`),
-    interroge le modèle, renvoie la probabilité de victoire + métadonnées,
-  - `GET /metrics` → export Prometheus.
-- `model_loader.py` : charge le modèle **directement depuis le MLflow Model
-  Registry** (`models:/lol-win-predictor/<stage>`), jamais depuis un fichier
-  local — exigence explicite du sujet : *"the registry is the single source
-  of truth for deployments"* et *"production must serve predictions from the
-  Production registry stage only"*. Le stage à charger vient de la variable
-  d'env `MLFLOW_MODEL_STAGE` (`Staging` en environnement staging, `Production`
-  en prod) — **même image Docker dans les deux environnements**, seule la
-  configuration change (12-factor, section 12).
-- `metrics.py` : compteurs/histogramme Prometheus (section 11).
-
-Vérifié en local : `/health`, `/predict` (payload complet et partiel — les
-champs omis prennent la valeur médiane du dataset) et `/metrics` répondent
-correctement, avec un vrai modèle chargé depuis le registre.
+**Where it runs:** it is the decisive step of the `staging -> main` pipeline
+(section 10) — merging `staging` into `main` only deploys to production if this
+gate passes.
 
 ---
 
-## 6. Le frontend Next.js
+## 5. The Flask backend
 
-**Ce qui a été fait** — `frontend/` (Next.js 15, App Router) : une page unique
-(`app/page.js`) avec un formulaire pour les statistiques clés d'une partie
-(kills, morts, assists, écart d'or/XP, dragons, hérauts, tours, wards), qui
-appelle `POST {NEXT_PUBLIC_API_URL}/predict` et affiche le résultat sous forme
-de barre bleu/rouge + le modèle/commit/version de données ayant servi la
-prédiction (traçabilité visible jusque dans l'UI).
+**What was done** — `backend/app/`:
+- `main.py`: `create_app()` factory (from the *"Linting, Testing & Git Hooks for
+  a Flask App"* lab), with 3 routes:
+  - `GET /health` → status + loaded-model metadata (name, version, stage,
+    commit, data version),
+  - `POST /predict` → builds the feature vector (`features.py`), queries the
+    model, returns the win probability + metadata,
+  - `GET /metrics` → Prometheus export.
+  Startup is resilient: if the model can't load (e.g. DagsHub is briefly slow
+  during a deploy), `/health` still comes up and the model is loaded lazily on
+  the first `/predict`, so a transient hiccup never fails a deploy.
+- `model_loader.py`: loads the model **directly from the MLflow Model Registry**
+  (`models:/lol-win-predictor/<stage>`), never from a local file — an explicit
+  requirement: *"the registry is the single source of truth for deployments"*
+  and *"production must serve predictions from the Production registry stage
+  only"*. The stage comes from the `MLFLOW_MODEL_STAGE` env var (`Staging` in
+  staging, `Production` in prod) — **the same Docker image in both
+  environments**, only the config differs (12-factor, section 12).
+- `metrics.py`: Prometheus counters/histogram (section 11).
 
-**Pourquoi Next.js plutôt que du React pur ?** C'est la recommandation
-explicite du sujet (*"a NodeJS framework for the frontend, like ReactJS or
-NextJS"*) ; Next.js apporte un build de prod optimisé et un serveur Node
-autonome (`output: "standalone"`) pratique à conteneuriser.
-
-Build de production vérifié (`npm run build`) et flux complet testé
-manuellement (formulaire → requête → affichage du résultat).
+Verified in production: `/health`, `/predict` and `/metrics` all respond, with a
+real model loaded from the DagsHub registry.
 
 ---
 
-## 7. Les tests
+## 6. The Next.js frontend
 
-Exigence du sujet : *"3 unit tests, 2 integration tests, 1 end-to-end test"*,
-tous automatisés en CI. J'en ai fait plus que le minimum, pour que chaque test
-soit vraiment utile plutôt que de la figuration :
+**What was done** — `frontend/` (Next.js 15, App Router): a single page
+(`app/page.js`) with a form for the key match stats (kills, deaths, assists,
+gold/XP diff, dragons, heralds, towers, wards) that calls
+`POST {NEXT_PUBLIC_API_URL}/predict` and shows the result as a blue/red bar plus
+the model / commit / data version that produced the prediction (traceability
+visible right in the UI). It also warns when the entered stats **contradict each
+other** (e.g. bad KDA but a gold diff of 0), so the user knows the prediction is
+unreliable rather than assuming the model is wrong.
 
-| Type | Fichiers | Ce qu'ils vérifient |
+**Why Next.js over plain React?** It is the assignment's explicit recommendation
+(*"a NodeJS framework for the frontend, like ReactJS or NextJS"*); Next.js gives
+an optimized production build and a standalone Node server (`output:
+"standalone"`) that is easy to containerize.
+
+Production build verified (`npm run build`) and the full flow tested against the
+live deployment (form → request → result).
+
+---
+
+## 7. Tests
+
+Assignment requirement: *"3 unit tests, 2 integration tests, 1 end-to-end
+test"*, all automated in CI. There are more than the minimum, so each test is
+actually meaningful rather than filler:
+
+| Type | Files | What they verify |
 |---|---|---|
-| Unit (6) | `tests/unit/test_features.py`, `test_evaluate.py`, `test_versioning.py` | construction du vecteur de features, décision de la porte de qualité (au-dessus/en-dessous du seuil), parsing du hash DVC — fonctions pures, aucune I/O réseau/modèle |
-| Integration (4) | `tests/integration/test_health_endpoint.py`, `test_predict_endpoint.py` | vraie app Flask + vrai modèle chargé depuis un registre MLflow jetable, sur `/health` et `/predict` (cas valide, cas favorable à bleu, cas de payload invalide → 400) |
-| E2E (1) | `tests/e2e/test_e2e_selenium.py` | Selenium/Chrome headless pilote le vrai frontend, remplit le formulaire, vérifie que le résultat s'affiche — bout en bout navigateur → Next.js → Flask → MLflow |
+| Unit (6) | `tests/unit/test_features.py`, `test_evaluate.py`, `test_versioning.py` | feature-vector construction, quality-gate decision (above/below threshold), DVC hash parsing — pure functions, no network/model I/O |
+| Integration (4) | `tests/integration/test_health_endpoint.py`, `test_predict_endpoint.py` | a real Flask app + a real model loaded from a throwaway MLflow registry, on `/health` and `/predict` (valid case, blue-favored case, invalid payload → 400) |
+| E2E (1) | `tests/e2e/test_e2e_selenium.py` | headless Selenium/Chrome drives the real frontend, fills the form, checks the result appears — end to end browser → Next.js → Flask → MLflow |
 
-**Pourquoi un registre MLflow "jetable" pour les tests d'intégration ?**
-(`tests/conftest.py`) : pour que les tests exercent le **vrai** code
-d'entraînement + de chargement de modèle (pas de mock), sans dépendre d'un
-serveur MLflow partagé. Chaque session de test entraîne et enregistre un vrai
-modèle dans un dossier temporaire.
+**Why a "throwaway" MLflow registry for the integration tests?**
+(`tests/conftest.py`): so the tests exercise the **real** training +
+model-loading code (no mocks) without depending on a shared MLflow server. Each
+test session trains and registers a real model in a temporary folder.
 
-Tout est passé en local : `10 passed` (unit+integration) et `1 passed` (e2e,
-Chrome réel).
+All green: `10 passed` (unit+integration) and `1 passed` (e2e, real Chrome) —
+locally and in CI. The e2e test also passes when pointed at the live production
+deployment (`FRONTEND_URL=https://lol-frontend-scaw.onrender.com`).
 
-Lancer localement :
+Run locally:
 ```bash
 pip install -r requirements-dev.txt
 dvc pull
 pytest tests/unit tests/integration -v
-# pour l'e2e : démarrer backend + frontend dans deux terminaux, puis
+# for e2e: start backend + frontend in two terminals, then
 pytest tests/e2e -v
 ```
 
 ---
 
-## 8. Lint + Git hooks
+## 8. Lint & Git hooks
 
-**Ce qui a été fait** : configuration `ruff` dans `pyproject.toml` (reprise du
-TP *"Linting, Testing & Git Hooks"*, adaptée aux deux dossiers de code source
-`backend/app` et `ml/src`), et un hook `pre-push` (`.githooks/pre-push`) qui
-lance `ruff check` puis `pytest tests/unit tests/integration` avant chaque
-`git push`.
+**What was done:** `ruff` config in `pyproject.toml` (from the *"Linting,
+Testing & Git Hooks"* lab, adapted to both source folders `backend/app` and
+`ml/src`), and a `pre-push` hook (`.githooks/pre-push`) that runs `ruff check`
+then `pytest tests/unit tests/integration` before every `git push`.
 
-**Pourquoi `.githooks/` et pas directement `.git/hooks/pre-push` comme dans le
-TP ?** `.git/hooks/` n'est **jamais versionné par Git** — chaque
-collègue devrait recréer le hook à la main. En committant le hook dans
-`.githooks/` et en configurant `core.hooksPath` (une commande, voir
-`scripts/setup-git-hooks.sh`), le hook est partagé automatiquement par toute
-l'équipe dès le clone.
+**Why `.githooks/` instead of `.git/hooks/pre-push` like in the lab?**
+`.git/hooks/` is **never version-controlled** — each teammate would have to
+recreate the hook by hand. By committing the hook in `.githooks/` and setting
+`core.hooksPath` (one command, see `scripts/setup-git-hooks.sh`), the hook is
+shared automatically with the whole team on clone.
 
-Comportement vérifié exactement comme demandé par le TP :
-1. ligne de code volontairement mal formée ajoutée → `ruff check` échoue →
-   le hook s'arrête (`set -e`), le push aurait été bloqué ;
-2. erreur corrigée → `ruff check` puis `pytest` passent tous les deux → le
-   hook se termine avec succès.
+Behavior verified exactly as the lab asks:
+1. add a deliberately malformed line → `ruff check` fails → the hook stops
+   (`set -e`), the push would be blocked;
+2. fix it → `ruff check` then `pytest` both pass → the hook completes.
 
-Installation (une fois, après clone) :
+Install (once, after clone):
 ```bash
-bash scripts/setup-git-hooks.sh      # ou scripts/setup-git-hooks.ps1 sous PowerShell
+bash scripts/setup-git-hooks.sh      # or scripts/setup-git-hooks.ps1 on PowerShell
 ```
 
 ---
 
-## 9. Modèle de branches Git
+## 9. Git branching model
 
-Exigence stricte du sujet :
+Strict assignment requirement:
 
-- `feature/*` — tout le développement
-- `dev` — branche d'intégration
-- `staging` — validation pré-prod
+- `feature/*` — all development
+- `dev` — integration branch
+- `staging` — pre-production validation
 - `main` — production
 
-Chaque flèche `feature -> dev -> staging -> main` correspond à un des 3
-pipelines CI/CD ci-dessous, déclenché automatiquement par GitHub Actions.
+Each arrow `feature -> dev -> staging -> main` maps to one of the 3 CI/CD
+pipelines below, triggered automatically by GitHub Actions.
 
 ---
 
-## 10. CI/CD — les 3 pipelines GitHub Actions
+## 10. CI/CD — the 3 GitHub Actions pipelines
+
+> GitHub Actions is the engine; **we wrote the instructions** in
+> `.github/workflows/`. Nothing runs automatically without these files.
 
 ### `PR -> dev` (`.github/workflows/pr-to-dev.yml`)
-Se déclenche sur toute pull request ciblant `dev`. Étapes : `dvc pull`,
-`ruff check`, tests unitaires, tests d'intégration, puis **build** (sans push)
-des images Docker backend et frontend. Si tout passe, la PR peut être
-fusionnée dans `dev` — exactement la liste d'étapes du sujet.
+Triggers on any pull request targeting `dev`. Steps: `dvc pull`, `ruff check`,
+unit tests, integration tests, then **build** (no push) of the backend and
+frontend Docker images. If everything passes, the PR can be merged into `dev` —
+exactly the assignment's step list.
 
 ### `dev -> staging` (`.github/workflows/dev-to-staging.yml`)
-Se déclenche au push sur `staging`. C'est le pipeline le plus chargé :
-1. **suite de tests complète** : unit + integration, puis démarrage réel du
-   backend et du frontend (en arrière-plan, avec attente active sur
-   `/health`), et exécution du test e2e Selenium contre ce vrai environnement ;
-2. **entraînement du modèle candidat** : `ml/src/train.py --register` — cette
-   run est taguée avec le commit qui a déclenché le pipeline et la version
-   DVC courante, puis enregistrée en Registry et déplacée en stage
-   `Staging` ;
-3. **déploiement** : un `curl` vers un *deploy hook* (variable
-   `STAGING_DEPLOY_HOOK_URL`, voir section 13) qui redéploie le backend/
-   frontend de staging — au redémarrage, le backend recharge automatiquement
-   le modèle actuellement en `Staging` (`MLFLOW_MODEL_STAGE=Staging` dans
-   l'environment GitHub `staging`). C'est ce qui réalise concrètement *"deploy
-   candidate model from registry (MLFlow)"* : pas d'étape séparée nécessaire,
-   le mécanisme de chargement par stage s'en charge.
+Triggers on push to `staging`. The heaviest pipeline:
+1. **full test suite**: unit + integration, then a real start of the backend and
+   frontend (in the background, actively waiting on `/health`), and the Selenium
+   e2e test against that real environment;
+2. **train the candidate model**: `ml/src/train.py --register` — that run is
+   tagged with the triggering commit and the current DVC version, registered,
+   and moved to the `Staging` stage;
+3. **deploy**: a `curl` to a *deploy hook* (secret `STAGING_DEPLOY_HOOK_URL`) if
+   a staging environment is configured — on restart the backend reloads the
+   model currently in `Staging` (`MLFLOW_MODEL_STAGE=Staging`). This is how
+   *"deploy candidate model from registry (MLFlow)"* is achieved: no separate
+   step needed, the stage-based loading handles it.
 
 ### `staging -> main` (`.github/workflows/staging-to-main.yml`)
-Se déclenche au push sur `main`. Une seule étape décisive :
-`python ml/src/promote.py` (section 4). Si la porte de qualité échoue, le job
-échoue et **l'étape de déploiement suivante ne s'exécute jamais** (GitHub
-Actions saute les étapes suivantes d'un job en échec) — Production reste
-inchangée, exactement l'exigence *"model stays in Staging, production must
-not change"*. Si elle réussit, un second `curl` déclenche le déploiement en
-production.
+Triggers on push to `main`. The decisive step: `python ml/src/promote.py`
+(section 4). If the quality gate fails, the job fails and **the deploy step
+never runs** (GitHub Actions skips later steps of a failed job) — Production
+stays unchanged, exactly the *"model stays in Staging, production must not
+change"* requirement. If it passes, both Render deploy hooks are triggered so
+the freshly-promoted model goes live.
 
-**Secrets/variables GitHub à configurer** (par *environment* GitHub —
-Settings → Environments → `staging` / `production`) :
-- Secrets : `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
-  `MLFLOW_TRACKING_PASSWORD`
-- Variables : `STAGING_DEPLOY_HOOK_URL`, `PRODUCTION_DEPLOY_HOOK_URL`
+**GitHub Environment secrets/variables** (Settings → Environments →
+`staging` / `production`):
+- Secrets: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
+  `MLFLOW_TRACKING_PASSWORD`, `PRODUCTION_BACKEND_DEPLOY_HOOK_URL`,
+  `PRODUCTION_FRONTEND_DEPLOY_HOOK_URL`
 
-C'est la réponse concrète à l'exigence *12-Factor App* du sujet : *"The
-different environments need unique environment variables, which are to be
-generated from github secrets in their respective workflows"* — chaque
-environment GitHub a son propre jeu de secrets, injecté uniquement dans le
-job qui déclare `environment: staging` ou `environment: production`.
+This directly answers the *12-Factor App* requirement: *"The different
+environments need unique environment variables, which are to be generated from
+github secrets in their respective workflows"* — each GitHub environment has its
+own secret set, injected only into the job that declares
+`environment: staging` or `environment: production`.
 
 ---
 
-## 11. Monitoring Prometheus + Grafana
+## 11. Prometheus + Grafana monitoring
 
-**Ce qui a été fait** :
-- `backend/app/metrics.py` expose sur `/metrics` exactement les métriques
-  demandées : `predict_requests_total` (volume), `predict_request_latency_seconds`
-  (latence, histogramme → permet un p95 dans Grafana), `predict_requests_failed_total`
-  (erreurs), `app_up` (santé) — même pattern que le TP *"Monitoring with
-  prometheus"* (`prometheus_client`, compteurs incrémentés dans les routes).
-- `monitoring/prometheus/prometheus.yml` scrape ce endpoint toutes les 5s.
-- `monitoring/grafana/` provisionne **automatiquement** (pas de clic-ouí dans
-  l'UI) la datasource Prometheus et un dashboard
-  (`backend-overview.json`) avec les 4 panneaux exigés : volume de requêtes,
-  latence p95, taux d'erreur, statut de santé.
-- `docker-compose.yml` lance tout ensemble : `backend`, `frontend`,
+**What was done:**
+- `backend/app/metrics.py` exposes exactly the required metrics on `/metrics`:
+  `predict_requests_total` (volume), `predict_request_latency_seconds` (latency
+  histogram → enables a p95 in Grafana), `predict_requests_failed_total`
+  (errors), `app_up` (health) — same pattern as the *"Monitoring with
+  prometheus"* lab (`prometheus_client`, counters incremented in the routes).
+- `monitoring/prometheus/prometheus.yml` scrapes that endpoint every 5s.
+- `monitoring/grafana/` **auto-provisions** (no clicking in the UI) the
+  Prometheus datasource and a dashboard (`backend-overview.json`) with the 4
+  required panels: request volume, p95 latency, error rate, health status.
+- `docker-compose.yml` runs everything together: `backend`, `frontend`,
   `prometheus` (port 9090), `grafana` (port 3001, login `admin`/`admin`).
 
-**Surveiller la vraie prod** (le sujet insiste : *"Monitoring should run
-against the live production deployment"*) : un stack dédié est fourni.
-`monitoring/prometheus/prometheus.prod.yml` scrape le backend **public** déployé
-sur Render (`lol-backend-awex.onrender.com`), et `docker-compose.monitoring.yml`
-lance Prometheus + Grafana pointés dessus :
+**Monitoring the live production** (the assignment insists: *"Monitoring should
+run against the live production deployment"*): a dedicated stack is provided.
+`monitoring/prometheus/prometheus.prod.yml` scrapes the **public** backend
+deployed on Render (`lol-backend-awex.onrender.com`), and
+`docker-compose.monitoring.yml` runs Prometheus + Grafana pointed at it:
 
 ```bash
 docker compose -f docker-compose.monitoring.yml up
-# Prometheus : http://localhost:9090  (cible = backend de production live)
-# Grafana    : http://localhost:3001  (admin/admin, dashboard auto-chargé)
+# Prometheus: http://localhost:9090  (target = live production backend)
+# Grafana   : http://localhost:3001  (admin/admin, dashboard auto-loaded)
 ```
 
-Vérifié : Prometheus voit la cible de prod `up` et remonte les vraies métriques
-(`predict_requests_total`, latence, erreurs, `app_up`) depuis le serveur live.
+Verified: Prometheus sees the prod target `up` and reports the real metrics
+(`predict_requests_total`, latency, errors, `app_up`) from the live server.
 
 ---
 
 ## 12. 12-factor / configuration
 
-Toute valeur qui change selon l'environnement vient d'une variable d'env,
-jamais d'une valeur en dur (`backend/app/config.py`, `.env.example`) :
-`ENVIRONMENT`, `MLFLOW_TRACKING_URI`, `MLFLOW_MODEL_STAGE`, `CORS_ORIGINS`,
-`PORT`, `NEXT_PUBLIC_API_URL`, etc. En local, ces valeurs viennent d'un
-`.env` (copié depuis `.env.example`, jamais committé) ; en CI/CD elles
-viennent des secrets/variables du GitHub *Environment* concerné (section 10).
+Every value that changes per environment comes from an env var, never
+hard-coded (`backend/app/config.py`, `.env.example`): `ENVIRONMENT`,
+`MLFLOW_TRACKING_URI`, `MLFLOW_MODEL_STAGE`, `CORS_ORIGINS`, `PORT`,
+`NEXT_PUBLIC_API_URL`, etc. Locally these come from a `.env` (copied from
+`.env.example`, never committed); in CI/CD they come from the relevant GitHub
+Environment's secrets/variables (section 10); in production they are set in the
+Render dashboard.
 
-Un détail d'implémentation à connaître si tu modifies le backend :
-`MLFLOW_TRACKING_URI`, `MLFLOW_MODEL_NAME` et `MLFLOW_MODEL_STAGE` sont lus à
-**chaque appel** (pas mis en cache au démarrage) dans `model_loader.py` — ça
-permet aux tests de changer d'environnement à la volée (`monkeypatch.setenv`)
-et ça reflète ce qui se passe réellement en prod : chaque worker gunicorn lit
-son environnement à son propre démarrage.
-
----
-
-## 13. Déploiement cloud
-
-Le sujet laisse le choix de la plateforme (Render, Railway, Scalingo, Koyeb...).
-Le repo fournit un **blueprint `render.yaml`** qui décrit les 2 services
-(backend + frontend) prêts à déployer sur [Render](https://render.com).
-
-Étapes (Render) :
-
-1. Créer un compte sur render.com (connexion via GitHub, autoriser le repo).
-2. **New + → Blueprint** → choisir ce repo → Render lit `render.yaml` et crée
-   `lol-backend` et `lol-frontend`.
-3. Dans les réglages du **backend**, renseigner les 3 secrets marqués
-   `sync: false` (mêmes valeurs que les GitHub Secrets de l'environment
-   `production` : `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`,
-   `MLFLOW_TRACKING_PASSWORD`). Déployer → récupérer l'URL publique du backend.
-4. Renseigner `CORS_ORIGINS` (backend) = URL du frontend, et
-   `NEXT_PUBLIC_API_URL` (frontend) = URL du backend, puis redéployer le
-   frontend (cette variable est compilée dans le build Next.js).
-5. Récupérer l'URL de *deploy hook* de chaque service (Settings → Deploy Hook)
-   et la mettre dans les variables GitHub `PRODUCTION_DEPLOY_HOOK_URL` (et
-   `STAGING_DEPLOY_HOOK_URL` si tu déploies aussi un environnement staging) —
-   c'est ce que les workflows appellent pour redéployer après un train/promote
-   réussi (section 10).
-
-Les Dockerfiles écoutent sur le port `$PORT` fourni par la plateforme et se
-lient à `0.0.0.0`, donc ils fonctionnent tels quels sur Render/Railway/etc.
+Implementation detail if you edit the backend: `MLFLOW_TRACKING_URI`,
+`MLFLOW_MODEL_NAME` and `MLFLOW_MODEL_STAGE` are read on **every call** (not
+cached at startup) in `model_loader.py` — this lets tests switch environments on
+the fly (`monkeypatch.setenv`) and reflects reality: each gunicorn worker reads
+its environment at its own startup.
 
 ---
 
-## 14. Reproduire le projet de zéro
+## 13. Cloud deployment
+
+The assignment lets you pick the platform (Render, Railway, Scalingo, Koyeb…).
+The repo ships a **`render.yaml` blueprint** describing both services
+(backend + frontend), deployed on [Render](https://render.com):
+
+- Backend: https://lol-backend-awex.onrender.com
+- Frontend: https://lol-frontend-scaw.onrender.com
+
+Steps (Render):
+
+1. Create a render.com account (sign in with GitHub, authorize the repo).
+2. **New + → Blueprint** → pick this repo → Render reads `render.yaml` and
+   creates `lol-backend` and `lol-frontend`.
+3. In the **backend** settings, fill the 3 secrets marked `sync: false` (same
+   values as the `production` GitHub Secrets: `MLFLOW_TRACKING_URI`,
+   `MLFLOW_TRACKING_USERNAME`, `MLFLOW_TRACKING_PASSWORD`). Deploy → grab the
+   backend's public URL.
+4. Set `CORS_ORIGINS` (backend) = frontend URL, and `NEXT_PUBLIC_API_URL`
+   (frontend) = backend URL, then redeploy the frontend (this value is compiled
+   into the Next.js build).
+5. Grab each service's *deploy hook* (Settings → Deploy Hook) and store them as
+   the `production` GitHub Secrets `PRODUCTION_BACKEND_DEPLOY_HOOK_URL` /
+   `PRODUCTION_FRONTEND_DEPLOY_HOOK_URL` — the `staging -> main` workflow calls
+   them to redeploy after a successful promotion (section 10).
+
+The Dockerfiles listen on the platform-assigned `$PORT` and bind to `0.0.0.0`,
+so they run as-is on Render/Railway/etc.
+
+---
+
+## 14. Reproduce the project from scratch
 
 ```bash
-git clone <ton-repo>
+git clone <your-repo>
 cd league-win-predictor
 
 python -m venv .venv && source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 
-dvc pull                      # récupère high_diamond_ranked_10min.csv
+dvc pull                      # fetches high_diamond_ranked_10min.csv
 
 cd ml/src
-python train.py --model-type logreg --register   # entraîne + enregistre en Staging
-python promote.py                                  # porte de qualité -> Production
+python train.py --model-type logreg --register   # train + register as Staging
+python promote.py                                  # quality gate -> Production
 cd ../..
 
 bash scripts/setup-git-hooks.sh
@@ -463,10 +452,10 @@ bash scripts/setup-git-hooks.sh
 # Backend
 cd backend && python -m flask --app wsgi:app run --port 5000
 
-# Frontend (autre terminal)
+# Frontend (another terminal)
 cd frontend && npm install && npm run dev
 
-# Ou tout en une fois avec le monitoring :
+# Or everything at once with monitoring:
 docker-compose up --build
 # app: http://localhost:3000 | api: http://localhost:5000
 # prometheus: http://localhost:9090 | grafana: http://localhost:3001
@@ -474,25 +463,22 @@ docker-compose up --build
 
 ---
 
-## 15. Ce qu'il te reste à faire
+## 15. Project status
 
-Tout ce qui précède est construit, testé et validé **en local**. Il reste des
-étapes qui demandent tes propres comptes (je ne peux pas les créer à ta
-place) :
+**Done and verified end to end:**
 
-Déjà fait : repo GitHub + 4 branches, les 3 pipelines CI/CD verts, DagsHub
-connecté (registre MLflow + remote DVC), et les GitHub Secrets MLflow posés
-sur les environments `staging` et `production`.
+- GitHub repo + the 4 branches (`feature/* → dev → staging → main`), used via
+  real pull requests.
+- The 3 CI/CD pipelines, green, running against the shared DagsHub registry.
+- DagsHub connected as the MLflow registry **and** a DVC remote; a model version
+  is in the `Production` stage.
+- GitHub Environment secrets set for `staging` and `production`.
+- Live public deployment on Render (frontend + backend), serving predictions
+  from the Production registry stage only.
+- Automatic production deploy wired to the `staging -> main` pipeline (after the
+  quality gate).
+- Prometheus + Grafana monitoring against the live production backend.
 
-Il reste uniquement ce qui dépend d'un hébergeur cloud :
-
-1. **Créer les services d'hébergement** (Render/Railway/...) pour le backend
-   et le frontend → obtenir l'**URL publique** de production (livrable noté).
-2. **Renseigner les deploy hooks** comme variables GitHub
-   `STAGING_DEPLOY_HOOK_URL` / `PRODUCTION_DEPLOY_HOOK_URL` (section 10) — les
-   étapes "Deploy" des workflows sont *skipped* tant qu'elles sont vides.
-3. **Pointer le monitoring sur la prod live** : changer la cible dans
-   `monitoring/prometheus/prometheus.yml` pour l'URL publique du backend, et
-   héberger Prometheus/Grafana (section 11).
-4. Travailler désormais **exclusivement via des branches `feature/*`** vers
-   `dev`, laisser les pipelines CI/CD faire le reste.
+**Remaining:** the in-class presentation (see `presentation/`). Optional polish:
+tighten `CORS_ORIGINS` to the exact frontend URL; disable Render auto-deploy so
+production deploys are driven only by the CI after the quality gate.

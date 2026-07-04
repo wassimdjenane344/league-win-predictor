@@ -21,22 +21,22 @@ function analyzeConsistency(v) {
 
   if (combat >= 2 && gold <= -300) {
     warnings.push(
-      "Tu domines les combats/objectifs mais tu es en retard en or : dans une vraie partie, gagner les combats donne l'avantage en or."
+      "You're winning fights/objectives but behind in gold: in a real game, winning fights gives you the gold lead."
     );
   }
   if (combat <= -2 && gold >= 300) {
     warnings.push(
-      "Tu perds les combats mais tu mènes en or : rare dans une vraie partie à la 10ᵉ minute."
+      "You're losing fights but ahead in gold: rare in a real game at the 10-minute mark."
     );
   }
   if (Math.abs(gold) >= 1500 && Math.abs(xp) >= 1500 && Math.sign(gold) !== Math.sign(xp)) {
     warnings.push(
-      "L'écart d'or et l'écart d'XP vont dans des sens opposés : ils sont presque toujours corrélés."
+      "Gold diff and XP diff point in opposite directions: they are almost always correlated."
     );
   }
   if ((Math.abs(netKills) >= 2 || objectives >= 1) && gold === 0 && xp === 0) {
     warnings.push(
-      "Il se passe des choses (kills/objectifs) mais tu as laissé l'écart d'or et d'XP à 0 : ce sont justement les infos les plus importantes pour le modèle, il verra donc une partie ~équilibrée."
+      "There's action (kills/objectives) but you left gold and XP diff at 0: those are exactly the most important inputs for the model, so it will see a roughly even game."
     );
   }
   return warnings;
@@ -122,7 +122,7 @@ export default function Home() {
 
       {warnings.length > 0 && (
         <div className="warn">
-          <p className="warn-title">⚠️ Entrées peu cohérentes — prédiction à prendre avec des pincettes</p>
+          <p className="warn-title">⚠️ Inconsistent inputs — take this prediction with a grain of salt</p>
           <ul>
             {warnings.map((w, i) => (
               <li key={i}>{w}</li>

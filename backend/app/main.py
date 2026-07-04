@@ -32,9 +32,20 @@ from .model_loader import load_model, model_metadata, predict_win_probability
 logging.basicConfig(level=logging.INFO)
 
 
+def _cors_origins():
+    # Strip whitespace/newlines from each origin: an env var pasted with a
+    # trailing newline would otherwise become a CORS header containing "\n",
+    # which werkzeug rejects ("Header values must not contain newline
+    # characters"), 500-ing every response including /health.
+    raw = Config.CORS_ORIGINS.strip()
+    if raw == "*":
+        return "*"
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app, origins=Config.CORS_ORIGINS.split(",") if Config.CORS_ORIGINS != "*" else "*")
+    CORS(app, origins=_cors_origins())
 
     # Load the model eagerly, but NEVER let a transient registry/network issue
     # (e.g. DagsHub slow or unreachable during a deploy) crash startup: the

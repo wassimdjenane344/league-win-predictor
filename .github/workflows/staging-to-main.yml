@@ -27,6 +27,12 @@ jobs:
       # `secrets` can't be used directly in a step-level `if`, so we derive a
       # boolean env from it here (env may reference secrets) and test that below.
       HAS_SHARED_REGISTRY: ${{ secrets.MLFLOW_TRACKING_URI != '' }}
+      # Render deploy hooks (masked). Deploying only from here -- after the
+      # promotion gate passed -- guarantees the newly-restarted backend loads
+      # the model that was *just* promoted to Production (turn OFF Render's own
+      # auto-deploy so this is the single source of production deploys).
+      BACKEND_DEPLOY_HOOK: ${{ secrets.PRODUCTION_BACKEND_DEPLOY_HOOK_URL }}
+      FRONTEND_DEPLOY_HOOK: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_HOOK_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,5 +60,8 @@ jobs:
         run: python promote.py
 
       - name: Deploy backend + frontend to production
-        if: ${{ vars.PRODUCTION_DEPLOY_HOOK_URL != '' }}
-        run: curl -fsSL -X POST "${{ vars.PRODUCTION_DEPLOY_HOOK_URL }}"
+        if: env.BACKEND_DEPLOY_HOOK != ''
+        run: |
+          echo "Gate passed -> deploying the promoted model to production"
+          curl -fsSL -X POST "$BACKEND_DEPLOY_HOOK"
+          curl -fsSL -X POST "$FRONTEND_DEPLOY_HOOK"

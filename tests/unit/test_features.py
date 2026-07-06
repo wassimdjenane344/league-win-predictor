@@ -1,8 +1,4 @@
-"""Unit test #1: feature-vector construction (backend/app/features.py).
-
-Pure function, no network/model/file I/O -- this is what makes it a unit
-test rather than an integration test.
-"""
+"""Tests for feature-vector construction (backend/app/features.py)."""
 
 from app.features import FEATURE_COLUMNS, FEATURE_DEFAULTS, build_feature_vector
 
@@ -22,5 +18,4 @@ def test_build_feature_vector_overrides_only_the_provided_fields():
     as_dict = dict(zip(FEATURE_COLUMNS, vector, strict=True))
     assert as_dict["blueGoldDiff"] == 2500.0
     assert as_dict["blueKills"] == 10.0
-    # Everything else must still fall back to the dataset-median default.
     assert as_dict["blueDeaths"] == float(FEATURE_DEFAULTS["blueDeaths"])

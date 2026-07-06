@@ -1,18 +1,12 @@
 """Model promotion pipeline: Staging candidate -> quality gate -> Production.
 
-This is the "Model Promotion Pipeline (Core Requirement)" from the final
-project spec. It is meant to run as the last step of the `staging` ->
-`main` GitHub Actions workflow:
+Runs as the last step of the `staging` -> `main` GitHub Actions workflow:
 
-    1. Fetch the current "Staging" model version (the candidate the
-       dev->staging pipeline deployed).
-    2. Re-evaluate it against a held-out split of the reference dataset
-       (the required quality gate; here: minimum accuracy).
-    3. If the gate passes: promote the version to "Production" and
-       archive the previous Production version.
-       If it fails: leave Staging untouched, change nothing in
-       Production, and exit with a non-zero status so the CI job -- and
-       therefore the staging->main merge -- fails.
+    1. Fetch the current "Staging" model version.
+    2. Re-evaluate it against a held-out split of the dataset (quality gate:
+       minimum accuracy).
+    3. Pass: promote to "Production", archive the previous version.
+       Fail: leave Staging untouched, exit non-zero so the CI job fails.
 
 Usage:
     python ml/src/promote.py
@@ -60,7 +54,7 @@ def main() -> None:
     df = pd.read_csv(DEFAULT_DATA_PATH)
     X = df[FEATURE_COLUMNS]
     y = df[TARGET_COLUMN]
-    # Same seed/split as training so the gate is evaluated on a comparable holdout.
+    # Same seed/split as training so the holdout is comparable.
     _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
     y_pred = model.predict(X_test)

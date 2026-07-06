@@ -1,14 +1,8 @@
 """Feature schema shared by training and serving.
 
-Keeping this list in one place is what lets the Flask backend build a
-feature vector in exactly the same order the model was trained on, and
-lets tests / the frontend agree on what a "match snapshot" looks like.
-
-We deliberately use the *blue-side* subset of the raw Kaggle columns
-(dataset: "League of Legends Diamond Ranked Games (10 min)"), i.e. the
-statistics a player can read off their own scoreboard at minute 10. This
-keeps the input form on the frontend short while still being a fair,
-realistic subset of the real 40-column dataset.
+Uses the *blue-side* subset of the raw Kaggle columns (dataset: "League of
+Legends Diamond Ranked Games (10 min)") -- the stats a player can read off
+their own scoreboard at minute 10.
 """
 
 from __future__ import annotations
@@ -35,8 +29,7 @@ FEATURE_COLUMNS: list[str] = [
 
 TARGET_COLUMN = "blueWins"
 
-# Sensible defaults (roughly the dataset median) so the API/frontend can
-# omit fields the user doesn't want to fill in manually.
+# Roughly the dataset median, so the API/frontend can omit fields.
 FEATURE_DEFAULTS: dict[str, float] = {
     "blueWardsPlaced": 14,
     "blueWardsDestroyed": 2,

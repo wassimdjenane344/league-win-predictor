@@ -1,13 +1,9 @@
 """Flask application factory serving the LoL win-probability model.
 
-Endpoints
----------
-GET  /health   liveness/readiness probe used by CI integration tests, the
-               Docker HEALTHCHECK, and the "backend health status" metric.
-POST /predict  takes a (partial) 10-minute match snapshot and returns the
-               blue-side win probability from the model currently
-               deployed in MLFLOW_MODEL_STAGE (Staging or Production).
-GET  /metrics  Prometheus scrape endpoint (see app/metrics.py).
+GET  /health   liveness/readiness probe
+POST /predict  takes a (partial) 10-minute match snapshot, returns the
+               blue-side win probability from the currently deployed model
+GET  /metrics  Prometheus scrape endpoint (see app/metrics.py)
 """
 
 from __future__ import annotations
@@ -36,10 +32,8 @@ def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app, origins=Config.CORS_ORIGINS.split(",") if Config.CORS_ORIGINS != "*" else "*")
 
-    # Load the model eagerly, but NEVER let a transient registry/network issue
-    # (e.g. DagsHub slow or unreachable during a deploy) crash startup: the
-    # platform health check hits /health, which must come up regardless. If the
-    # eager load fails, the model is loaded lazily on the first /predict.
+    # Don't let a transient registry issue crash startup: /health must come
+    # up regardless. If this fails, the model loads lazily on first /predict.
     try:
         load_model()
     except Exception as exc:  # noqa: BLE001 - startup must survive any load failure

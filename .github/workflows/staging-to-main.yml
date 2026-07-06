@@ -1,16 +1,13 @@
 name: staging -> main
 
-# "staging -> main" required pipeline (final project spec): requires passing
-# model promotion gates, then deploys the code/model previously validated on
-# staging to production. If ml/src/promote.py's quality gate fails, this job
-# fails and the deploy-to-production step below never runs -- Production is
-# left untouched, exactly as required.
+# Runs the model promotion quality gate, then deploys to production.
+# If ml/src/promote.py's gate fails, this job fails and the deploy step
+# never runs -- production stays untouched.
 #
 # With a shared registry secret (DagsHub), promote.py promotes the exact
 # candidate that dev->staging registered in "Staging". Without a secret, the
-# job falls back to a local file store and trains + registers a deterministic
-# candidate first (same seed => identical model), so the promotion gate still
-# runs green and end-to-end. See README section 10.
+# job falls back to a local file store and trains + registers a candidate
+# first so the gate still runs end-to-end.
 on:
   push:
     branches: [main]
@@ -18,19 +15,15 @@ on:
 jobs:
   promote-and-deploy:
     runs-on: ubuntu-latest
-    environment: production # GitHub Environment -> scopes the secrets below
+    environment: production 
     env:
       MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || format('file://{0}/ml/mlruns', github.workspace) }}
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
       MLFLOW_MODEL_NAME: lol-win-predictor
-      # `secrets` can't be used directly in a step-level `if`, so we derive a
-      # boolean env from it here (env may reference secrets) and test that below.
+
       HAS_SHARED_REGISTRY: ${{ secrets.MLFLOW_TRACKING_URI != '' }}
-      # Render deploy hooks (masked). Deploying only from here -- after the
-      # promotion gate passed -- guarantees the newly-restarted backend loads
-      # the model that was *just* promoted to Production (turn OFF Render's own
-      # auto-deploy so this is the single source of production deploys).
+
       BACKEND_DEPLOY_HOOK: ${{ secrets.PRODUCTION_BACKEND_DEPLOY_HOOK_URL }}
       FRONTEND_DEPLOY_HOOK: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_HOOK_URL }}
     steps:
@@ -47,9 +40,7 @@ jobs:
       - name: Pull DVC-tracked dataset
         run: dvc pull
 
-      # Only needed in the no-shared-registry fallback: make sure there IS a
-      # candidate in "Staging" for the gate to evaluate. With a real shared
-      # registry configured, dev->staging already put one there.
+
       - name: Ensure a Staging candidate exists
         if: env.HAS_SHARED_REGISTRY == 'false'
         working-directory: ml/src

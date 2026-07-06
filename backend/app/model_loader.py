@@ -1,12 +1,8 @@
-"""Loads the win-prediction model straight from the MLflow Model Registry.
+"""Loads the win-prediction model from the MLflow Model Registry.
 
-The final project spec is explicit that "the registry is the single source
-of truth for deployments" and that "production must serve predictions from
-the Production registry stage only". This module never reads a model file
-from disk: it always resolves `models:/<name>/<stage>` through MLflow, where
-`<stage>` is `Staging` in the staging environment and `Production` in
-production (see backend/app/config.py, driven by the MLFLOW_MODEL_STAGE
-env var so the same Docker image is used in both environments).
+Never reads a model file from disk: always resolves `models:/<name>/<stage>`
+through MLflow, where `<stage>` is `Staging` or `Production` depending on the
+MLFLOW_MODEL_STAGE env var, so the same Docker image works in both environments.
 """
 
 from __future__ import annotations
@@ -27,10 +23,9 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _state: dict = {"model": None, "version": None, "run_id": None, "tags": {}}
 
-# Read directly from the environment (rather than through app.config.Config)
-# on every call, not just at import time: this is what lets each gunicorn
-# worker -- and each test, via monkeypatch.setenv -- point at its own MLflow
-# registry/stage without stale values cached from process start.
+# Read directly from the environment on every call (not just at import time)
+# so each gunicorn worker, and each test via monkeypatch.setenv, can point at
+# its own MLflow registry/stage.
 
 
 def _model_name() -> str:

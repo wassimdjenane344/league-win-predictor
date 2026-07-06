@@ -1,10 +1,7 @@
-"""Unit test #2: the promotion quality gate (ml/src/evaluate.py).
+"""Tests for the promotion quality gate (ml/src/evaluate.py).
 
-This is the function that decides whether a candidate model may move from
-"Staging" to "Production" (see ml/src/promote.py) -- getting the threshold
-comparison wrong would silently let a bad model reach production, so it is
-tested directly against the ACCURACY_THRESHOLD constant rather than against
-a hard-coded number.
+Checked against the ACCURACY_THRESHOLD constant rather than a hard-coded
+number, so it stays correct if the threshold changes.
 """
 
 from evaluate import ACCURACY_THRESHOLD, passes_quality_gate

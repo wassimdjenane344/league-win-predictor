@@ -1,15 +1,8 @@
 """Train the League of Legends 10-minute win predictor and log everything to MLflow.
 
-Every run logs, per the final project spec:
-  - parameters (model type, hyperparameters, test split)
-  - metrics (accuracy, f1, precision, recall, roc_auc)
-  - the DVC data version (md5 from data/raw/high_diamond_ranked_10min.csv.dvc)
-  - the Git commit hash of the code that produced the run
-
-When --register is passed, the model is registered in the MLflow Model
-Registry and immediately moved to the "Staging" stage: this is the
-"candidate model" the dev->staging pipeline deploys and quality-gates
-before it can ever reach "Production" (see ml/src/promote.py).
+Each run logs params, metrics, the DVC data version, and the Git commit hash.
+With --register, the model is registered and moved to the "Staging" stage,
+where ml/src/promote.py can later pick it up for the quality gate.
 
 Usage:
     python ml/src/train.py --model-type logreg --register

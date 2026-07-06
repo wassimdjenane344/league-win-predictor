@@ -1,12 +1,8 @@
 """Shared pytest fixtures.
 
-The integration tests need a real MLflow Model Registry with a model in
-"Production" to exercise the actual backend code path (no mocking of
-MLflow itself: this is what makes them integration tests rather than unit
-tests). Instead of depending on a shared/external MLflow server, each test
-session gets its own throwaway registry, trained and promoted through the
-*real* ml/src/train.py and ml/src/promote.py scripts -- so a green test
-suite is also proof that the training + promotion pipeline itself works.
+Integration tests need a real MLflow registry with a model in "Production"
+(no mocking MLflow). Each test session gets its own throwaway registry,
+trained and promoted through the real train.py / promote.py scripts.
 """
 
 from __future__ import annotations
@@ -61,7 +57,7 @@ def flask_app(trained_registry_uri, monkeypatch):
     from app.model_loader import load_model
 
     application = create_app()
-    load_model(force_reload=True)  # ensure it picks up this test's registry
+    load_model(force_reload=True)
     return application
 
 

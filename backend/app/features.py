@@ -1,12 +1,8 @@
 """Feature contract for the /predict endpoint.
 
-Deliberately kept as a small, self-contained copy of ml/src/features.py
-rather than a shared import across the ml/ and backend/ Docker build
-contexts: the two services are built and deployed independently (each
-with its own Dockerfile and its own requirements.txt), and this contract
-is a short, stable list of column names, not logic worth the added
-cross-context import wiring. If it drifts, the unit tests in
-tests/unit/test_features.py catch it.
+Kept as a standalone copy of ml/src/features.py rather than a shared import,
+since backend/ and ml/ are built and deployed as separate Docker images.
+tests/unit/test_features.py catches it if the two ever drift apart.
 """
 
 from __future__ import annotations

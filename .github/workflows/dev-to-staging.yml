@@ -1,15 +1,8 @@
 name: dev -> staging
 
-# "dev -> staging" required pipeline (final project spec):
-#   - full test suite (unit + integration + e2e)
-#   - deploy code to staging environment
-#   - deploy candidate model from registry (MLflow): train.py registers a
-#     new version and moves it to the "Staging" stage; the staging backend
-#     (MLFLOW_MODEL_STAGE=Staging) picks it up as soon as it (re)starts.
-#
-# MLFLOW_TRACKING_URI falls back to a job-local file store when no shared
-# registry secret is configured, so this pipeline is green out-of-the-box
-# and starts using DagsHub the moment you add the secret (README section 3).
+# Full test suite (unit + integration + e2e), then trains a candidate model
+# and registers it as "Staging". MLFLOW_TRACKING_URI falls back to a
+# job-local file store when no shared registry secret is configured.
 on:
   push:
     branches: [staging]

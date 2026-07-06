@@ -1,16 +1,8 @@
 """Prometheus instrumentation.
 
-Implements the "Required Metrics" list from the final project spec:
-  - total number of prediction requests      -> PREDICT_REQUESTS_TOTAL
-  - prediction request latency                -> PREDICT_LATENCY_SECONDS
-  - number of failed requests                  -> PREDICT_REQUESTS_FAILED_TOTAL
-  - backend uptime / health status             -> APP_UP
-
-Follows the same prometheus_client pattern taught in the course
-("Monitoring with prometheus.pdf"): Counter/Info objects created at
-import time, incremented inside the route handlers, and served through a
-plain Flask route rather than the client's own http server so the app
-keeps a single port (12-factor: one process listens on $PORT).
+Counter/Gauge/Histogram objects are created at import time, incremented in
+the route handlers, and served through a plain Flask route (rather than the
+client's own HTTP server) so the app keeps a single port.
 """
 
 from __future__ import annotations

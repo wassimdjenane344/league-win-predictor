@@ -1,10 +1,4 @@
-"""Integration test #2: POST /predict, end to end through the real registered model.
-
-Exercises the full request path (Flask route -> feature vector -> MLflow
-model -> JSON response) against the model trained and promoted by the
-`trained_registry_uri` fixture, so it would fail if the API contract, the
-feature ordering, or the model-loading code ever drifted apart.
-"""
+"""POST /predict, end to end through the real registered model."""
 
 
 def test_predict_returns_a_probability_and_traceability_fields(client):

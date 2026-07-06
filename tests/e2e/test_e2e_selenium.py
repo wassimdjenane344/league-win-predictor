@@ -2,10 +2,8 @@
 gets a real prediction back from the real backend.
 
 Unlike the unit/integration tests, this does NOT start the app itself: it
-drives whatever is already running at FRONTEND_URL against BACKEND_URL,
-exactly like a human tester would. In CI (.github/workflows/dev-to-staging.yml)
-both services are started as background steps before this test runs; locally
-you can do the same:
+drives whatever is already running at FRONTEND_URL, like a human tester
+would. In CI both services are started before this test runs; locally:
 
     # terminal 1
     cd backend && MLFLOW_TRACKING_URI=<uri> MLFLOW_MODEL_STAGE=Production \

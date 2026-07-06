@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Runs ruff + the fast test suite before every `git push`, exactly like the
-# course's "Linting, Testing & Git Hooks" exercise. Kept in .githooks/ (not
-# .git/hooks/) and wired up via `git config core.hooksPath .githooks` so the
-# hook itself is version-controlled and every teammate gets it on clone
-# (see scripts/setup-git-hooks.sh).
+# Runs ruff + the fast test suite before every `git push`. Kept in
+# .githooks/ (not .git/hooks/) and wired up via
+# `git config core.hooksPath .githooks` so it's version-controlled and every
+# teammate gets it on clone (see scripts/setup-git-hooks.sh).
 #
-# The Selenium e2e test is intentionally excluded here: it needs the
-# frontend + backend actually running, which doesn't belong in a local
-# pre-push hook. It runs in the dev->staging CI pipeline instead.
+# The Selenium e2e test is excluded: it needs the frontend + backend running,
+# which doesn't belong in a local pre-push hook. Runs in CI instead.
 set -e
 
 PYTHON=${PYTHON:-python}

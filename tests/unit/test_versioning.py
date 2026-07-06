@@ -1,10 +1,4 @@
-"""Unit test #3: DVC data-version resolution (ml/src/versioning.py).
-
-Every training run must be traceable to a DVC data version (final project
-spec, "Data Versioning (DVC)"). This checks that we correctly parse the
-`.dvc` pointer file's md5 hash, and that we fail soft (not with a crash)
-when it doesn't exist yet.
-"""
+"""Tests for DVC data-version resolution (ml/src/versioning.py)."""
 
 from pathlib import Path
 

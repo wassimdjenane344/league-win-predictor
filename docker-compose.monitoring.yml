@@ -1,10 +1,7 @@
-# Monitoring stack pointed at the LIVE PRODUCTION backend on Render.
+# Monitoring stack pointed at the live production backend on Render.
 # Run:  docker compose -f docker-compose.monitoring.yml up
 #   Prometheus -> http://localhost:9090   (scrapes lol-backend-awex.onrender.com)
 #   Grafana    -> http://localhost:3001   (login admin/admin, dashboard auto-loaded)
-# This is what satisfies "monitoring runs against the live production
-# deployment": Prometheus scrapes the public prod /metrics endpoint, not a
-# local backend.
 
 networks:
   monitoring:

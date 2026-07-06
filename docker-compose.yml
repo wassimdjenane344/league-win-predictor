@@ -1,7 +1,6 @@
 # Local, single-command reproduction of the whole system: app (backend +
-# frontend) plus the monitoring stack (Prometheus + Grafana), wired exactly
-# like the "Monitoring: Prometheus and Grafana" section of the final
-# project spec. Run: `docker-compose up --build`.
+# frontend) plus the monitoring stack (Prometheus + Grafana).
+# Run: `docker-compose up --build`.
 
 networks:
   app:
